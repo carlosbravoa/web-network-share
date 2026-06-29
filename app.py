@@ -145,6 +145,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._api_delete()
             if path == "/api/rename":
                 return self._api_rename()
+            if path == "/api/move":
+                return self._api_move()
             if path == "/api/zip":
                 return self._api_zip()
             return self._error(HTTPStatus.NOT_FOUND, "not found")
@@ -285,6 +287,30 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("a file with that name already exists")
         os.rename(src, dst)
         return self._send_json({"ok": True, "path": rel_of(dst)})
+
+    def _api_move(self):
+        data = self._read_json_body()
+        src = safe_join(data.get("path", ""))
+        dest_dir = safe_join(data.get("dest", ""))
+        if src == SHARE_DIR:
+            raise ValueError("cannot move root")
+        if not os.path.exists(src):
+            raise ValueError("source not found")
+        if not os.path.isdir(dest_dir):
+            raise ValueError("destination is not a folder")
+        # Already in the destination → nothing to do.
+        if os.path.dirname(src) == dest_dir:
+            return self._send_json({"ok": True, "path": rel_of(src)})
+        # Forbid moving a folder into itself or one of its descendants.
+        if os.path.isdir(src) and (
+            dest_dir == src or dest_dir.startswith(src + os.sep)
+        ):
+            raise ValueError("cannot move a folder into itself")
+        target = os.path.join(dest_dir, os.path.basename(src))
+        if os.path.exists(target):
+            raise ValueError("an item with that name already exists there")
+        os.rename(src, target)
+        return self._send_json({"ok": True, "path": rel_of(target)})
 
     # ----- API: zip (stream a bundle of files/folders) ------------------- #
     def _api_zip(self):

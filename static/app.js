@@ -11,6 +11,8 @@ const diskInfo = $("diskInfo");
 let cwd = ""; // current folder, relative to share root
 let currentItems = []; // items shown in the current folder
 const selected = new Set(); // selected item paths
+let dragItems = []; // paths currently being dragged for a move
+const MOVE_TYPE = "application/x-msb-move"; // marks an internal (move) drag
 
 // --------------------------------------------------------------------------- //
 // Helpers
@@ -89,6 +91,7 @@ function renderCrumbs() {
   home.textContent = "🏠 Home";
   home.onclick = () => load("");
   if (!parts.length) home.classList.add("current");
+  wireDropTarget(home, () => "");
   crumbs.appendChild(home);
   let acc = "";
   parts.forEach((p, i) => {
@@ -101,6 +104,7 @@ function renderCrumbs() {
     a.textContent = p;
     const target = acc;
     a.onclick = () => load(target);
+    wireDropTarget(a, () => target);
     if (i === parts.length - 1) a.classList.add("current");
     crumbs.appendChild(a);
   });
@@ -113,6 +117,23 @@ function renderList(items) {
   for (const it of items) {
     const li = document.createElement("li");
     li.className = "file-row";
+
+    // Drag this row to move it (or the whole selection, if it's part of one).
+    li.draggable = true;
+    li.addEventListener("dragstart", (e) => {
+      dragItems = selected.has(it.path) && selected.size > 1
+        ? [...selected] : [it.path];
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData(MOVE_TYPE, "1");
+      e.dataTransfer.setData("text/plain", dragItems.join("\n"));
+      li.classList.add("dragging-row");
+    });
+    li.addEventListener("dragend", () => {
+      li.classList.remove("dragging-row");
+      dragItems = [];
+    });
+    // Folders are also drop targets: drop an item onto one to move it inside.
+    if (it.is_dir) wireDropTarget(li, () => it.path);
 
     const nameCell = document.createElement("div");
     nameCell.className = "name-cell " + (it.is_dir ? "folder" : "file");
@@ -231,6 +252,55 @@ $("bulkDeleteBtn").onclick = async () => {
   else toast(`Deleted ${paths.length} item(s)`);
   load(cwd);
 };
+
+// --------------------------------------------------------------------------- //
+// Drag-to-move
+// --------------------------------------------------------------------------- //
+function isInternalDrag(e) {
+  return e.dataTransfer && [...e.dataTransfer.types].includes(MOVE_TYPE);
+}
+
+// Make `el` accept dropped rows; getDest() returns the destination folder path.
+function wireDropTarget(el, getDest) {
+  el.addEventListener("dragover", (e) => {
+    if (!isInternalDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    el.classList.add("drop-target");
+  });
+  el.addEventListener("dragleave", (e) => {
+    if (!el.contains(e.relatedTarget)) el.classList.remove("drop-target");
+  });
+  el.addEventListener("drop", (e) => {
+    if (!isInternalDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    el.classList.remove("drop-target");
+    moveItems(dragItems.slice(), getDest());
+  });
+}
+
+async function moveItems(paths, dest) {
+  let moved = 0, failed = 0, lastErr = "";
+  for (const path of paths) {
+    // Skip dropping a folder onto itself, and items already in the target.
+    if (path === dest) continue;
+    try {
+      const r = await fetch("/api/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, dest }),
+      });
+      if (r.ok) moved++;
+      else { failed++; lastErr = (await r.json()).error || ""; }
+    } catch (e) { failed++; lastErr = e.message; }
+  }
+  if (moved) toast(`Moved ${moved} item${moved === 1 ? "" : "s"}` +
+    (dest ? ` to ${dest.split("/").pop()}` : " to Home"));
+  if (failed) toast(`${failed} couldn't be moved${lastErr ? ": " + lastErr : ""}`, true);
+  load(cwd);
+}
 
 function iconButton(svg, title, onClick, danger) {
   const b = document.createElement("button");
@@ -443,6 +513,7 @@ window.addEventListener("drop", async (e) => {
   showOverlay(false);
   const dt = e.dataTransfer;
   if (!dt) return;
+  if (isInternalDrag(e)) return; // an internal move handled by a drop target
 
   // Prefer the entry API so dropped folders are walked recursively.
   const items = dt.items ? [...dt.items] : [];

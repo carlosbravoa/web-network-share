@@ -12,6 +12,8 @@ No accounts, no agent, no cloud — files live on the server's local disk.
 - Drag-and-drop upload of files **and folders** (folder structure is preserved)
 - Live per-file upload progress; large files stream straight to disk
 - Browse folders, create folders, rename, delete, one-click download
+- Drag a row onto a folder (or onto a breadcrumb) to **move** it there
+- Multi-select with checkboxes to bulk-download as a ZIP or bulk-delete
 - Shows disk usage; works on phones and tablets too
 - Pure Python standard library — nothing to `pip install`
 
