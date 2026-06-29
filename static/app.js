@@ -362,7 +362,11 @@ async function renderPicker() {
     data = await r.json();
     if (!r.ok) throw new Error(data.error || r.statusText);
   } catch (e) {
-    listEl.innerHTML = `<li class="move-empty">Couldn’t load: ${e.message}</li>`;
+    listEl.innerHTML = "";
+    const li = document.createElement("li");
+    li.className = "move-empty";
+    li.textContent = "Couldn’t load: " + e.message; // textContent: no HTML injection
+    listEl.appendChild(li);
     return;
   }
   pickerCwd = data.path;

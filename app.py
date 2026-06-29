@@ -33,6 +33,8 @@ MAX_UPLOAD = int(os.environ.get("MAX_UPLOAD", "0"))
 CHUNK = 1024 * 1024  # 1 MiB streaming chunk
 
 os.makedirs(SHARE_DIR, exist_ok=True)
+SHARE_REAL = os.path.realpath(SHARE_DIR)
+MAX_JSON = 1024 * 1024  # cap control-request bodies (mkdir/delete/rename/move/zip)
 
 
 # --------------------------------------------------------------------------- #
@@ -44,6 +46,11 @@ def safe_join(rel):
     # Normalise and forbid anything that climbs out of the share root.
     full = os.path.abspath(os.path.join(SHARE_DIR, rel))
     if full != SHARE_DIR and not full.startswith(SHARE_DIR + os.sep):
+        raise ValueError("path escapes storage root")
+    # Defence in depth: also resolve symlinks so a link inside the share can't
+    # point the real target outside it (the lexical check above is link-blind).
+    real = os.path.realpath(full)
+    if real != SHARE_REAL and not real.startswith(SHARE_REAL + os.sep):
         raise ValueError("path escapes storage root")
     return full
 
@@ -102,6 +109,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _read_json_body(self):
         length = int(self.headers.get("Content-Length", "0"))
+        if length > MAX_JSON:
+            raise ValueError("request too large")
         raw = self.rfile.read(length) if length else b""
         return json.loads(raw or b"{}")
 
@@ -123,7 +132,9 @@ class Handler(BaseHTTPRequestHandler):
         except BrokenPipeError:
             pass
         except Exception as e:  # noqa: BLE001
-            return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, str(e))
+            # Log the detail server-side; don't leak paths/errno to the client.
+            sys.stderr.write(f"error handling {self.command} {self.path}: {e!r}\n")
+            return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "internal server error")
 
     def do_PUT(self):
         path, q = self._query()
@@ -134,7 +145,9 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as e:
             return self._error(HTTPStatus.BAD_REQUEST, str(e))
         except Exception as e:  # noqa: BLE001
-            return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, str(e))
+            # Log the detail server-side; don't leak paths/errno to the client.
+            sys.stderr.write(f"error handling {self.command} {self.path}: {e!r}\n")
+            return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "internal server error")
 
     def do_POST(self):
         path, _ = self._query()
@@ -153,13 +166,17 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as e:
             return self._error(HTTPStatus.BAD_REQUEST, str(e))
         except Exception as e:  # noqa: BLE001
-            return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, str(e))
+            # Log the detail server-side; don't leak paths/errno to the client.
+            sys.stderr.write(f"error handling {self.command} {self.path}: {e!r}\n")
+            return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "internal server error")
 
     # ----- static files -------------------------------------------------- #
     def _serve_static(self, rel):
         rel = rel.lstrip("/")
         full = os.path.abspath(os.path.join(STATIC_DIR, rel))
-        if not full.startswith(STATIC_DIR) or not os.path.isfile(full):
+        # Require the separator so a sibling like ".../static_secret" can't
+        # satisfy a bare startswith(".../static") prefix check.
+        if not full.startswith(STATIC_DIR + os.sep) or not os.path.isfile(full):
             return self._error(HTTPStatus.NOT_FOUND, "not found")
         ctype = {
             ".html": "text/html; charset=utf-8",
