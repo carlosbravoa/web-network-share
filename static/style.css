@@ -288,6 +288,71 @@ body {
 .up-item.error .bar > span { background: var(--danger); }
 .up-item.error .up-pct { color: var(--danger); }
 
+/* Move-to picker modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 9, 18, .6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 40;
+}
+.modal-card {
+  width: 460px;
+  max-width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(0,0,0,.55);
+  overflow: hidden;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  font-weight: 650;
+  border-bottom: 1px solid var(--line);
+}
+.modal-head .x {
+  background: none; border: none; color: var(--muted);
+  font-size: 22px; line-height: 1; cursor: pointer;
+}
+.modal-head .x:hover { color: var(--text); }
+.move-path {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 3px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px; color: var(--muted);
+}
+.move-path a { color: var(--muted); text-decoration: none; padding: 3px 7px; border-radius: 6px; cursor: pointer; }
+.move-path a:hover { background: var(--panel-2); color: var(--text); }
+.move-path a.current { color: var(--text); font-weight: 600; }
+.move-path .sep { opacity: .5; }
+
+.move-list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; flex: 1; min-height: 120px; }
+.move-row {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 12px; border-radius: 9px; cursor: pointer;
+}
+.move-row:hover { background: var(--panel-2); }
+.move-row .label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.move-row .enter { color: var(--muted); font-size: 18px; }
+.move-empty { padding: 24px 12px; text-align: center; color: var(--muted); }
+
+.modal-foot {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+}
+.modal-foot .spacer { flex: 1; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
 /* Toast */
 .toast {
   position: fixed;

@@ -29,6 +29,7 @@
     <span id="selCount">0 selected</span>
     <div class="sel-actions">
       <button id="zipBtn" class="btn">Download as ZIP</button>
+      <button id="moveBtn" class="btn ghost">Move to…</button>
       <button id="bulkDeleteBtn" class="btn ghost">Delete</button>
       <button id="clearSelBtn" class="btn ghost">Clear</button>
     </div>
@@ -64,6 +65,23 @@
       <button id="uploadsClose" class="x" title="Dismiss">×</button>
     </div>
     <ul id="uploadList"></ul>
+  </div>
+
+  <div id="movePicker" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <span id="moveTitle">Move</span>
+        <button id="moveClose" class="x" title="Cancel">×</button>
+      </div>
+      <nav id="movePath" class="move-path" aria-label="Destination"></nav>
+      <ul id="moveList" class="move-list"></ul>
+      <div class="modal-foot">
+        <button id="moveNewFolder" class="btn ghost">New folder</button>
+        <span class="spacer"></span>
+        <button id="moveCancel" class="btn ghost">Cancel</button>
+        <button id="moveConfirm" class="btn">Move here</button>
+      </div>
+    </div>
   </div>
 
   <div id="toast" class="toast" hidden></div>

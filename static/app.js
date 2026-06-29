@@ -49,6 +49,7 @@ const ICONS = {
   download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>`,
   rename: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>`,
+  move: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 13h6"/><path d="M13 11l2 2-2 2"/></svg>`,
 };
 
 let toastTimer = null;
@@ -174,6 +175,7 @@ function renderList(items) {
     if (!it.is_dir) {
       actions.appendChild(iconButton(ICONS.download, "Download", () => download(it.path)));
     }
+    actions.appendChild(iconButton(ICONS.move, "Move to…", () => openMovePicker([it])));
     actions.appendChild(iconButton(ICONS.rename, "Rename", () => rename(it)));
     actions.appendChild(iconButton(ICONS.trash, "Delete", () => remove(it), true));
 
@@ -301,6 +303,116 @@ async function moveItems(paths, dest) {
   if (failed) toast(`${failed} couldn't be moved${lastErr ? ": " + lastErr : ""}`, true);
   load(cwd);
 }
+
+// ----- "Move to…" folder picker (works on touch, no dragging needed) ------- //
+const movePicker = $("movePicker");
+let moveTargets = []; // item objects {path, name, is_dir} being moved
+let pickerCwd = "";   // folder currently browsed inside the picker
+
+// A destination is blocked if it's a folder being moved, or inside one.
+function destBlocked(dest) {
+  return moveTargets.some((t) =>
+    t.is_dir && (dest === t.path || dest.startsWith(t.path + "/")));
+}
+
+function openMovePicker(items) {
+  moveTargets = items;
+  if (!moveTargets.length) return;
+  pickerCwd = ""; // start at Home so any destination is reachable
+  const n = moveTargets.length;
+  $("moveTitle").textContent = n === 1
+    ? `Move “${moveTargets[0].name}” to…`
+    : `Move ${n} items to…`;
+  movePicker.hidden = false;
+  renderPicker();
+}
+
+function closePicker() {
+  movePicker.hidden = true;
+  moveTargets = [];
+}
+
+async function renderPicker() {
+  const pathEl = $("movePath");
+  const listEl = $("moveList");
+  // Breadcrumb inside the picker.
+  pathEl.innerHTML = "";
+  const mk = (label, target, current) => {
+    const a = document.createElement("a");
+    a.textContent = label;
+    if (current) a.classList.add("current");
+    else a.onclick = () => { pickerCwd = target; renderPicker(); };
+    return a;
+  };
+  pathEl.appendChild(mk("🏠 Home", "", pickerCwd === ""));
+  let acc = "";
+  (pickerCwd ? pickerCwd.split("/") : []).forEach((p, i, arr) => {
+    const sep = document.createElement("span");
+    sep.className = "sep"; sep.textContent = "/";
+    pathEl.appendChild(sep);
+    acc = acc ? `${acc}/${p}` : p;
+    pathEl.appendChild(mk(p, acc, i === arr.length - 1));
+  });
+
+  // Folders inside the current picker folder.
+  listEl.innerHTML = "";
+  let data;
+  try {
+    const r = await fetch(`/api/list?path=${encodeURIComponent(pickerCwd)}`);
+    data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+  } catch (e) {
+    listEl.innerHTML = `<li class="move-empty">Couldn’t load: ${e.message}</li>`;
+    return;
+  }
+  pickerCwd = data.path;
+  const folders = data.items.filter((it) => it.is_dir && !destBlocked(it.path));
+  if (!folders.length) {
+    listEl.innerHTML = `<li class="move-empty">No subfolders here</li>`;
+  } else {
+    for (const f of folders) {
+      const li = document.createElement("li");
+      li.className = "move-row";
+      li.innerHTML = svgIcon("folder") + `<span class="label"></span>` +
+        `<span class="enter">›</span>`;
+      li.querySelector(".label").textContent = f.name;
+      li.onclick = () => { pickerCwd = f.path; renderPicker(); };
+      listEl.appendChild(li);
+    }
+  }
+
+  // "Move here" targets the folder currently shown; block invalid spots.
+  const confirm = $("moveConfirm");
+  const blocked = destBlocked(pickerCwd);
+  confirm.disabled = blocked;
+  confirm.textContent = pickerCwd
+    ? `Move here: ${pickerCwd.split("/").pop()}` : "Move to Home";
+}
+
+$("moveBtn").onclick = () =>
+  openMovePicker(currentItems.filter((it) => selected.has(it.path)));
+$("moveConfirm").onclick = () => {
+  const dest = pickerCwd;
+  const paths = moveTargets.map((t) => t.path);
+  closePicker();
+  moveItems(paths, dest);
+};
+$("moveNewFolder").onclick = async () => {
+  const name = prompt("New folder name:");
+  if (!name) return;
+  try {
+    const r = await fetch("/api/mkdir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: joinPath(pickerCwd, name) }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    renderPicker();
+  } catch (e) { toast("Could not create folder: " + e.message, true); }
+};
+$("moveCancel").onclick = closePicker;
+$("moveClose").onclick = closePicker;
+movePicker.onclick = (e) => { if (e.target === movePicker) closePicker(); };
 
 function iconButton(svg, title, onClick, danger) {
   const b = document.createElement("button");

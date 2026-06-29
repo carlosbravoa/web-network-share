@@ -14,6 +14,10 @@ venv/
 .DS_Store
 *.swp
 
+# Claude Code project notes
+CLAUDE.md
+.claude/
+
 # Runtime / logs
 *.log
 *.part
