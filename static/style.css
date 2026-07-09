@@ -29,7 +29,7 @@ html, body {
 body {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
 }
 
 /* Top bar */
@@ -131,12 +131,15 @@ body {
 /* Drop area / table */
 .dropzone {
   flex: 1;
+  min-height: 0; /* let the flex child (file list) shrink so it can scroll */
+  display: flex;
+  flex-direction: column;
   position: relative;
   margin: 0 16px 16px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  overflow: hidden;
+  overflow: hidden; /* clip to the rounded corners; the file list scrolls inside */
 }
 
 .table-head, .file-row {
@@ -155,7 +158,14 @@ body {
   background: var(--panel-2);
 }
 
-.file-list { list-style: none; margin: 0; padding: 0; }
+.file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto; /* scroll the rows when the list is taller than the pane */
+}
 .file-row {
   border-bottom: 1px solid rgba(36, 52, 80, .5);
   cursor: default;

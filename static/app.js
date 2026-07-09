@@ -38,6 +38,17 @@ function joinPath(dir, name) {
   return dir ? `${dir}/${name}` : name;
 }
 
+// Reflect the current folder in the URL hash so a reload (or a shared/bookmarked
+// link) reopens the same folder instead of starting back at Home. Each segment
+// is encoded on its own so slashes stay as separators.
+function pathToHash(p) {
+  return "#/" + (p ? p.split("/").map(encodeURIComponent).join("/") : "");
+}
+function hashToPath() {
+  const h = location.hash.replace(/^#\/?/, "");
+  return h ? h.split("/").map(decodeURIComponent).join("/") : "";
+}
+
 function svgIcon(kind) {
   if (kind === "folder") {
     return `<svg class="icon folder" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>`;
@@ -78,6 +89,10 @@ async function load(path) {
     return;
   }
   cwd = data.path;
+  // Keep the URL in sync (setting an identical hash is a no-op, so this won't
+  // loop with the hashchange handler below).
+  const want = pathToHash(cwd);
+  if (location.hash !== want) location.hash = want;
   renderCrumbs();
   renderList(data.items);
   const d = data.disk;
@@ -652,5 +667,11 @@ $("fileInput").onchange = (e) => {
 };
 $("newFolderBtn").onclick = makeFolder;
 
+// Back/forward and manual hash edits navigate to the requested folder.
+window.addEventListener("hashchange", () => {
+  const p = hashToPath();
+  if (p !== cwd) load(p);
+});
+
 // --------------------------------------------------------------------------- //
-load("");
+load(hashToPath());
